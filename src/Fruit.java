@@ -21,7 +21,7 @@ public class Fruit extends GameObject {
     private FruitType type;
     
     public Fruit(int x, int y, double vx, double vy) {
-        super(x, y, vx, vy, 20);
+        super(x, y, vx, vy, 50);
         // Randomly assign a type of fruit for point value and color
         FruitType[] types = FruitType.values();
         this.type = types[(int)(Math.random() * types.length)];
