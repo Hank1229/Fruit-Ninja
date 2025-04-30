@@ -1,402 +1,286 @@
-import javax.swing.JPanel;
-import javax.swing.Timer;
-import javax.swing.JButton;
-import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.Point;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.event.ActionListener;
-import java.awt.event.ActionEvent;
-import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
-import java.awt.event.MouseEvent;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Random;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import javax.sound.sampled.*;
+import java.io.File;
+import java.net.URL;
+import java.util.*;
 
 public class GamePanel extends JPanel implements ActionListener, MouseListener, MouseMotionListener {
-    // Constants for panel size and game physics
-    public static final int WIDTH = 800;
-    public static final int HEIGHT = 600;
-    public static final double GRAVITY = 0.5; // gravity acceleration (pixels per frame^2)
-    private static final int INITIAL_SPAWN_INTERVAL = 100; // frames between spawns at start (approx 2 seconds at 20ms frame)
-    
-    private Timer timer;                // Swing timer for game loop (UIR2)
-    private List<GameObject> objects;   // Active game objects (fruits, bombs, bonuses) on screen
-    private Random rand;                // Random generator for spawning objects
-    
-    private boolean gameOver;           // Flag indicating if game is over (FR8)
-    private int score;
-    private int lives;
-    
-    // Swipe detection and combo tracking
-    private boolean swipeActive;            // Is the player currently swiping (mouse pressed and held)
-    private List<Point> swipePoints;        // Points of the current swipe trail (UIR1)
-    private int currentSwipeFruitCount;     // Number of fruits sliced in current continuous swipe (for combos) (FR4)
-    
-    // Combo message display
-    private String comboMessage;            // Message to display for combos or bonuses (UIR5)
-    private int comboMessageTimer;          // Frames remaining to display the combo message
-    
-    // Bonus effects
-    private boolean slowMotionActive;       // If true, slow-motion effect is active (from bonus or combo)
-    private int slowMotionTimer;            // Frames remaining for slow motion effect
-    
-    // Buttons for game over options (UIR6)
-    private JButton restartButton;
-    private JButton exitButton;
-    
-    // Difficulty control
-    private int spawnInterval;              // Current frames between spawns (decreases over time for difficulty, FR7)
-    private int spawnCounter;               // Counter for frames since last spawn
-    private int nextDifficultyScoreThreshold; // Score at which to next increase difficulty
-    
+    public static final int WIDTH = 800, HEIGHT = 600;
+    public static final double GRAVITY = 0.5;
+
+    private Timer timer;
+    private List<GameObject> objects = new ArrayList<>();
+    private Random rand = new Random();
+
+    private int score = 0, lives = 3;
+    private boolean gameOver = false;
+
+    private boolean swipeActive = false;
+    private List<Point> swipePoints = new ArrayList<>();
+    private int comboCount = 0;
+    private String comboMsg = "";
+    private int comboTimer = 0;
+
+    private boolean slowMo = false;
+    private int slowMoTimer = 0;
+
+    // 新增資源欄位
+    private BufferedImage bgImage;
+    private BufferedImage[] fruitSprites;
+    private BufferedImage[][] halfFruitSprites;
+    private BufferedImage bombSprite;
+    private BufferedImage[] explosionFrames;
+    private Clip sliceSfx, bombSfx, explosionSfx;
+
+    private JButton restartBtn, exitBtn;
+    private int spawnInterval = 100, spawnCounter = 0, nextThreshold = 50;
+
     public GamePanel() {
         setPreferredSize(new Dimension(WIDTH, HEIGHT));
-        setBackground(Color.DARK_GRAY);  // Background color for game canvas
-        setLayout(null); // Use manual layout for overlay components (like buttons)
-        
-        // Initialize game state
-        objects = new ArrayList<>();
-        rand = new Random();
-        gameOver = false;
-        score = 0;
-        lives = 3;
-        swipeActive = false;
-        swipePoints = new ArrayList<>();
-        currentSwipeFruitCount = 0;
-        comboMessage = "";
-        comboMessageTimer = 0;
-        slowMotionActive = false;
-        slowMotionTimer = 0;
-        
-        spawnInterval = INITIAL_SPAWN_INTERVAL;
-        spawnCounter = 0;
-        nextDifficultyScoreThreshold = 50; // Increase difficulty at score 50, then 100, etc.
-        
-        // Setup mouse listeners for swipe detection (FR2)
+        setLayout(null);
         addMouseListener(this);
         addMouseMotionListener(this);
-        setFocusable(true);
-        
-        // Setup game over buttons (UIR6)
-        restartButton = new JButton("Restart");
-        exitButton = new JButton("Exit");
-        // Position buttons at center of screen (they will be shown on game over)
-        restartButton.setBounds(WIDTH/2 - 60, HEIGHT/2 - 10, 120, 30);
-        exitButton.setBounds(WIDTH/2 - 60, HEIGHT/2 + 30, 120, 30);
-        restartButton.setVisible(false);
-        exitButton.setVisible(false);
-        // Add buttons to panel
-        add(restartButton);
-        add(exitButton);
-        // Action listeners for buttons
-        restartButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                restartGame();
+
+        // Preload assets
+        try {
+            bgImage = ImageIO.read(getClass().getResource("/assets/background/woodBackground.png"));
+            String[] types = {"apple","orange","banana"};
+            fruitSprites      = new BufferedImage[types.length];
+            halfFruitSprites  = new BufferedImage[types.length][2];
+            for(int i=0; i<types.length; i++){
+                fruitSprites[i]      = ImageIO.read(getClass().getResource("/assets/fruit/"       + types[i] + ".png"));
+                halfFruitSprites[i][0] = ImageIO.read(getClass().getResource("/assets/half-fruit/" + types[i] + "_left.png"));
+                halfFruitSprites[i][1] = ImageIO.read(getClass().getResource("/assets/half-fruit/" + types[i] + "_right.png"));
             }
-        });
-        exitButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                // Exit the game
-                System.exit(0);
+            bombSprite = ImageIO.read(getClass().getResource("/assets/bomb/bomb.png"));
+            URL expDirUrl = getClass().getResource("/assets/explosion");
+            File expDir = new File(expDirUrl.toURI());
+            File[] frames = expDir.listFiles();
+            explosionFrames = new BufferedImage[frames.length];
+            for(int i=0; i<frames.length; i++){
+                explosionFrames[i] = ImageIO.read(frames[i]);
             }
-        });
-        
-        // Start the game loop timer (UIR2 - smooth animations)
-        timer = new Timer(16, this); // ~60 FPS
+            sliceSfx     = AudioSystem.getClip();
+            sliceSfx.open(AudioSystem.getAudioInputStream(getClass().getResource("/assets/sound/slice.wav")));
+            bombSfx      = AudioSystem.getClip();
+            bombSfx.open(AudioSystem.getAudioInputStream(getClass().getResource("/assets/sound/bomb.wav")));
+            explosionSfx = AudioSystem.getClip();
+            explosionSfx.open(AudioSystem.getAudioInputStream(getClass().getResource("/assets/sound/explosion.wav")));
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
+
+        // Game Over buttons
+        restartBtn = new JButton("Restart");
+        exitBtn    = new JButton("Exit");
+        restartBtn.setBounds(350, 260, 100, 30);
+        exitBtn.setBounds(350, 300, 100, 30);
+        restartBtn.setVisible(false);
+        exitBtn.setVisible(false);
+        add(restartBtn); add(exitBtn);
+        restartBtn.addActionListener(e -> restart());
+        exitBtn.addActionListener(e -> System.exit(0));
+
+        timer = new Timer(16, this);
         timer.start();
     }
-    
-    // Game loop tick - called by timer every frame
+
     @Override
     public void actionPerformed(ActionEvent e) {
-        if (!gameOver) {
-            // Spawn new objects at intervals (FR1)
+        if(!gameOver) {
             spawnCounter++;
-            if (spawnCounter >= spawnInterval) {
-                spawnObject(); // Launch a new fruit/bonus/bomb from bottom
+            if(spawnCounter >= spawnInterval) {
+                spawn();
                 spawnCounter = 0;
             }
-            
-            // Update positions of all objects (UIR2 - smooth movement)
-            double speedFactor = slowMotionActive ? 0.5 : 1.0; // If slow motion bonus active, move at half speed
-            for (GameObject obj : objects) {
-                obj.update(speedFactor);
-            }
-            
-            // Apply gravity uniformly to objects (part of update)
-            // Check for objects that went out of bounds
+            double speed = slowMo ? 0.5 : 1.0;
             Iterator<GameObject> it = objects.iterator();
-            while (it.hasNext()) {
+            while(it.hasNext()) {
                 GameObject obj = it.next();
-                if (obj.isOffScreen(WIDTH, HEIGHT)) {
-                    // If a fruit was missed (fell off bottom without being sliced), lose a life (like missing fruit in Fruit Ninja)
-                    if (!obj.isSliced()) {
-                        if (obj instanceof Fruit) {
-                            loseLife(); // Player missed a fruit
-                        }
-                        // No penalty for missing bombs or bonuses; they simply disappear if not sliced
-                    }
+                obj.update(speed);
+                if(obj.isOffScreen(WIDTH, HEIGHT)) {
+                    if(obj instanceof Fruit && !obj.isSliced()) loseLife();
                     it.remove();
                 }
             }
-            
-            // Decrease slow motion timer if active (FR4/FR5 slow-motion effect)
-            if (slowMotionActive) {
-                slowMotionTimer--;
-                if (slowMotionTimer <= 0) {
-                    slowMotionActive = false;
-                }
-            }
-            
-            // Decrease combo message display timer
-            if (comboMessageTimer > 0) {
-                comboMessageTimer--;
-                if (comboMessageTimer == 0) {
-                    comboMessage = "";
-                }
-            }
-            
-            // Increase difficulty as score grows (FR7)
-            if (score >= nextDifficultyScoreThreshold) {
-                // Increase difficulty: speed up spawns (reduce interval)
-                spawnInterval = Math.max(20, spawnInterval - 10); // Faster spawn, not below 20 frames (~0.3s)
-                nextDifficultyScoreThreshold += 50;  // Next threshold (increase every 50 points)
+            if(slowMo && --slowMoTimer <= 0) slowMo = false;
+            if(comboTimer-- <= 0) comboMsg = "";
+            if(score >= nextThreshold) {
+                spawnInterval = Math.max(20, spawnInterval - 10);
+                nextThreshold += 50;
             }
         }
-        
-        // Redraw the game scene
         repaint();
     }
-    
-    // Launch a new object from the bottom (could be fruit, bomb, or bonus) (FR1)
-    private void spawnObject() {
-        int xPos = rand.nextInt(WIDTH - 100) + 50; // Spawn somewhere near bottom, avoiding extreme edges
-        int yPos = HEIGHT + 10; // Just below bottom of screen
-        // Random velocities for a nice arc
-        double initVy = -(rand.nextDouble() * 5 + 15); // Upward velocity (negative y direction) ~[-15,-20]
-        double initVx = rand.nextDouble() * 6 - 3;     // Horizontal velocity between -3 and 3
-        // Randomly decide object type: mostly fruits, some bombs, some bonus
+
+    private void spawn() {
+        int x = rand.nextInt(WIDTH - 100) + 50;
+        int y = HEIGHT + 10;
+        double vy = -(rand.nextDouble()*5 + 15);
+        double vx = rand.nextDouble()*6 - 3;
         double r = rand.nextDouble();
-        GameObject newObj;
-        if (r < 0.70) {
-            // 70% chance fruit
-            newObj = new Fruit(xPos, yPos, initVx, initVy);
-        } else if (r < 0.85) {
-            // 15% chance bomb
-            newObj = new Bomb(xPos, yPos, initVx, initVy);
+        if(r < 0.70) {
+            int idx = rand.nextInt(fruitSprites.length);
+            objects.add(new Fruit(x,y,vx,vy, idx));
+        } else if(r < 0.85) {
+            objects.add(new Bomb(x,y,vx,vy));
         } else {
-            // 15% chance bonus item
-            newObj = new BonusItem(xPos, yPos, initVx, initVy);
+            objects.add(new BonusItem(x,y,vx,vy));
         }
-        objects.add(newObj);
     }
-    
-    // Handle losing one life (common routine for bomb hit or missed fruit)
+
     private void loseLife() {
-        lives--;
-        if (lives <= 0) {
-            lives = 0;
-            endGame(); // Trigger game over if no lives left (FR8)
-        }
+        if(--lives <= 0) endGame();
     }
-    
-    // End the game and show Game Over screen (FR8, UIR6)
+
     private void endGame() {
         gameOver = true;
         timer.stop();
-        // Update high score
-        if (score > FruitNinjaGame.highScore) {
-            FruitNinjaGame.highScore = score;
-        }
-        // Show game over options
-        restartButton.setVisible(true);
-        exitButton.setVisible(true);
-        // Force repaint to draw "Game Over" text and scores
-        repaint();
+        restartBtn.setVisible(true);
+        exitBtn.setVisible(true);
     }
-    
-    // Restart the game after game over
-    private void restartGame() {
-        // Reset game state
-        score = 0;
-        lives = 3;
-        objects.clear();
-        swipePoints.clear();
-        swipeActive = false;
-        currentSwipeFruitCount = 0;
-        comboMessage = "";
-        comboMessageTimer = 0;
-        slowMotionActive = false;
-        slowMotionTimer = 0;
-        gameOver = false;
-        // Reset difficulty
-        spawnInterval = INITIAL_SPAWN_INTERVAL;
-        spawnCounter = 0;
-        nextDifficultyScoreThreshold = 50;
-        // Hide game over buttons
-        restartButton.setVisible(false);
-        exitButton.setVisible(false);
-        // Restart timer loop
+
+    private void restart() {
+        score = 0; lives = 3; objects.clear();
+        gameOver = false; spawnInterval = 100; nextThreshold = 50;
+        restartBtn.setVisible(false); exitBtn.setVisible(false);
         timer.start();
     }
-    
-    // Paint the game elements on the screen (called by Swing)
+
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        // Draw all active game objects (UIR2)
-        for (GameObject obj : objects) {
-            obj.draw(g);
-        }
-        // Draw the swipe trail (UIR1)
-        if (!swipePoints.isEmpty()) {
-            Graphics2D g2 = (Graphics2D) g;
-            g2.setColor(Color.WHITE);
-            g2.setStroke(new java.awt.BasicStroke(3)); // Thicker line for the blade trail
-            for (int i = 0; i < swipePoints.size() - 1; i++) {
-                Point p1 = swipePoints.get(i);
-                Point p2 = swipePoints.get(i + 1);
-                g2.drawLine(p1.x, p1.y, p2.x, p2.y);
+        Graphics2D g2 = (Graphics2D)g;
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,    RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_RENDERING,       RenderingHints.VALUE_RENDER_QUALITY);
+
+        // draw background
+        g2.drawImage(bgImage, 0, 0, WIDTH, HEIGHT, null);
+
+        // draw objects
+        for(GameObject obj : objects) {
+            int cx = (int)obj.x, cy = (int)obj.y, r = obj.radius;
+            // shadow
+            g2.setColor(new Color(0,0,0,50));
+            g2.fillOval(cx-r/2, cy-r/2+5, r*2, r);
+
+            if(!obj.isSliced()) {
+                if(obj instanceof Fruit) {
+                    int idx = ((Fruit)obj).getTypeIndex();
+                    g2.drawImage(fruitSprites[idx], cx-r, cy-r, r*2, r*2, null);
+                } else if(obj instanceof Bomb) {
+                    g2.drawImage(bombSprite, cx-r, cy-r, r*2, r*2, null);
+                }
+            } else {
+                if(obj instanceof Fruit) {
+                    int idx = ((Fruit)obj).getTypeIndex();
+                    g2.drawImage(halfFruitSprites[idx][0], cx-r, cy-r, r, r*2, null);
+                    g2.drawImage(halfFruitSprites[idx][1], cx,   cy-r, r, r*2, null);
+                    score += ((Fruit)obj).getPointValue(); // ensure scoring
+                } else if(obj instanceof Bomb) {
+                    Bomb b = (Bomb)obj;
+                    int f = b.getFrameCounter() % explosionFrames.length;
+                    g2.drawImage(explosionFrames[f], cx-r, cy-r, r*2, r*2, null);
+                    b.incrementFrameCounter();
+                } else if(obj instanceof BonusItem) {
+                    BonusItem bi = (BonusItem)obj;
+                    // draw nothing here; effects handled in mouseDragged
+                }
             }
-            // Reset stroke to default
-            g2.setStroke(new java.awt.BasicStroke(1));
         }
-        // Draw score and lives (UIR3, UIR4)
-        g.setColor(Color.WHITE);
-        g.drawString("Score: " + score, 10, 20);
-        // Draw lives as heart icons
-        g.drawString("Lives:", 10, 40);
-        for (int i = 0; i < lives; i++) {
-            // Draw a heart symbol for each life (use Unicode heart)
-            g.setColor(Color.RED);
-            g.drawString("\u2665", 60 + i * 15, 40);
+
+        // play combo/bonus text
+        if(!comboMsg.isEmpty()) {
+            g2.setFont(new Font("SansSerif", Font.BOLD, 24));
+            int w = g2.getFontMetrics().stringWidth(comboMsg);
+            g2.setColor(Color.WHITE);
+            g2.drawString(comboMsg, (WIDTH - w)/2, 50);
         }
-        // Reset color for later drawings
-        g.setColor(Color.WHITE);
-        // Draw combo or bonus message if active (UIR5)
-        if (comboMessage != null && !comboMessage.isEmpty()) {
-            g.setFont(new Font("SansSerif", Font.BOLD, 24));
-            // Display combo message at center-top of screen
-            Font originalFont = g.getFont();
-            FontMetrics fm = g.getFontMetrics();
-            int textWidth = fm.stringWidth(comboMessage);
-            g.drawString(comboMessage, (WIDTH - textWidth) / 2, 50);
-            g.setFont(originalFont);
+
+        // UI overlay: score & lives
+        g2.setColor(Color.WHITE);
+        g2.drawString("Score: " + score, 10, 20);
+        g2.drawString("Lives:", 10, 40);
+        for(int i=0; i<lives; i++){
+            g2.setColor(Color.RED);
+            g2.drawString("\u2665", 60 + i*15, 40);
         }
-        // Draw game over screen overlay (UIR6)
-        if (gameOver) {
-            Graphics2D g2 = (Graphics2D) g;
-            g2.setColor(new Color(0, 0, 0, 150)); // Semi-transparent dark overlay
+
+        // game over overlay
+        if(gameOver) {
+            g2.setColor(new Color(0,0,0,150));
             g2.fillRect(0, 0, WIDTH, HEIGHT);
             g2.setColor(Color.WHITE);
             g2.setFont(new Font("SansSerif", Font.BOLD, 36));
-            String gameOverText = "Game Over";
-            FontMetrics fm = g2.getFontMetrics();
-            int textWidth = fm.stringWidth(gameOverText);
-            g2.drawString(gameOverText, (WIDTH - textWidth) / 2, HEIGHT/2 - 80);
-            g2.setFont(new Font("SansSerif", Font.PLAIN, 18));
-            String finalScoreText = "Final Score: " + score;
-            String highScoreText = "High Score: " + FruitNinjaGame.highScore;
-            g2.drawString(finalScoreText, WIDTH/2 - 80, HEIGHT/2 - 40);
-            g2.drawString(highScoreText, WIDTH/2 - 80, HEIGHT/2 - 20);
-            // Buttons (Restart and Exit) are already added and visible on top
+            g2.drawString("Game Over", WIDTH/2 - 100, HEIGHT/2 - 60);
+            restartBtn.setVisible(true);
+            exitBtn.setVisible(true);
         }
     }
-    
-    // MouseListener and MouseMotionListener implementations for swipe detection (FR2)
+
     @Override
     public void mousePressed(MouseEvent e) {
         swipeActive = true;
-        currentSwipeFruitCount = 0;
         swipePoints.clear();
-        // Record starting point of swipe
-        swipePoints.add(new Point(e.getX(), e.getY()));
+        comboCount = 0;
+        swipePoints.add(e.getPoint());
     }
 
     @Override
     public void mouseReleased(MouseEvent e) {
-        if (swipeActive) {
-            // Swipe ended, check for combo bonuses (FR4)
-            if (currentSwipeFruitCount >= 3) {
-                // Player sliced 3 or more fruits in one swipe -> combo
-                int bonusPoints = currentSwipeFruitCount; // e.g., +N points for an N-fruit combo
-                score += bonusPoints;
-                String message = currentSwipeFruitCount + " Fruits Combo! +" + bonusPoints + " points";
-                // Extra reward for large combos
-                if (currentSwipeFruitCount >= 5) {
-                    // Reward an extra life for combos of 5 or more (special reward as per FR4)
-                    if (lives < 5) { // Cap max lives to 5
-                        lives++;
-                    }
-                    message += " +1 Life!";
-                }
-                comboMessage = message;
-                comboMessageTimer = 60; // Display message for ~60 frames (1 second)
-            }
-        }
         swipeActive = false;
         swipePoints.clear();
+        if(comboCount >= 3) {
+            int bonus = comboCount;
+            score += bonus;
+            comboMsg = comboCount + " Combo! +" + bonus;
+            comboTimer = 60;
+        }
     }
 
     @Override
     public void mouseDragged(MouseEvent e) {
-        if (!swipeActive) return;
-        // Add point to swipe trail
-        swipePoints.add(new Point(e.getX(), e.getY()));
-        // Check line segment from last point to new point for intersections with objects (FR2, FR3, FR5, FR6)
-        if (swipePoints.size() >= 2) {
-            int n = swipePoints.size();
-            Point p1 = swipePoints.get(n - 2);
-            Point p2 = swipePoints.get(n - 1);
-            // Check each game object for collision with swipe line
-            Iterator<GameObject> it = objects.iterator();
-            while (it.hasNext()) {
-                GameObject obj = it.next();
-                if (!obj.isSliced() && obj.intersectsLine(p1.x, p1.y, p2.x, p2.y)) {
-                    // Object is sliced by the swipe
-                    obj.setSliced(true);
-                    if (obj instanceof Fruit) {
-                        Fruit fruit = (Fruit) obj;
-                        score += fruit.getPointValue(); // Increase score based on fruit type (FR3)
-                        currentSwipeFruitCount++;
-                    } else if (obj instanceof Bomb) {
-                        // Bomb sliced - lose a life (FR6)
-                        loseLife();
-                    } else if (obj instanceof BonusItem) {
-                        BonusItem bonus = (BonusItem) obj;
-                        score += bonus.getPointValue(); // Optional points for bonus
-                        // Activate bonus effect (FR5)
-                        if (bonus.getBonusType() == BonusItem.BonusType.EXTRA_LIFE) {
-                            if (lives < 5) {
-                                lives++;
-                            }
-                            comboMessage = "+1 Life!"; // Display life gain message (UIR5)
-                            comboMessageTimer = 60;
-                        } else if (bonus.getBonusType() == BonusItem.BonusType.SLOW_MOTION) {
-                            slowMotionActive = true;
-                            slowMotionTimer = 150; // Slow motion for 150 frames (~3 seconds)
-                            comboMessage = "Slow Motion Activated!"; // Display slow-mo message
-                            comboMessageTimer = 60;
-                        }
+        if(!swipeActive) return;
+        Point prev = swipePoints.get(swipePoints.size()-1);
+        Point cur  = e.getPoint();
+        swipePoints.add(cur);
+
+        Iterator<GameObject> it = objects.iterator();
+        while(it.hasNext()) {
+            GameObject obj = it.next();
+            if(!obj.isSliced() && obj.intersectsLine(prev.x, prev.y, cur.x, cur.y)) {
+                obj.setSliced(true);
+                if(obj instanceof Fruit) {
+                    sliceSfx.stop(); sliceSfx.setFramePosition(0); sliceSfx.start();
+                    comboCount++;
+                } else if(obj instanceof Bomb) {
+                    bombSfx.stop(); bombSfx.setFramePosition(0); bombSfx.start();
+                    explosionSfx.stop(); explosionSfx.setFramePosition(0); explosionSfx.start();
+                    loseLife();
+                } else if(obj instanceof BonusItem) {
+                    BonusItem bi = (BonusItem)obj;
+                    if(bi.getBonusType() == BonusItem.BonusType.EXTRA_LIFE && lives<5){
+                        lives++;
+                        comboMsg = "+1 Life!";
+                    } else if(bi.getBonusType() == BonusItem.BonusType.SLOW_MOTION){
+                        slowMo = true; slowMoTimer = 150;
+                        comboMsg = "Slow Motion!";
                     }
-                    // Remove the object from play
-                    it.remove();
+                    comboTimer = 60;
                 }
+                it.remove();
+                break; // only slice one per segment
             }
         }
-        // Repaint to update screen (trail drawing and possibly object removal visual)
-        repaint();
     }
-    
-    // Unused interface methods
+
+    // unused MouseListener stubs
+    @Override public void mouseMoved(MouseEvent e) {}
     @Override public void mouseClicked(MouseEvent e) {}
     @Override public void mouseEntered(MouseEvent e) {}
     @Override public void mouseExited(MouseEvent e) {}
-    @Override public void mouseMoved(MouseEvent e) {}
 }
