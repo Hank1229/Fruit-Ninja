@@ -35,13 +35,15 @@ A Java Swing remake of the classic “Fruit Ninja” arcade game. Slice flying f
    git clone https://github.com/<your‑username>/Fruit‑Ninja.git
    cd Fruit‑Ninja
 2. **Build**
+   ```bash
    javac -d bin src/com/fruitninja/*.java
-3. **Run**
+4. **Run**
+   ```bash
    java -cp bin com.fruitninja.FruitNinjaGame
 
 --- 
 
-##📂 Project Structure
+## 📂 Project Structure
 
 src/com/fruitninja/
 ├── Bomb.java           # defines Bomb and explosion logic
@@ -60,14 +62,14 @@ sound/ – .wav clips for slicing, bombs, power‑ups, music
 
 --- 
 
-##🎛 Controls
+## 🎛 Controls
 
-Left‑click & drag – slice fruits
-Pause/Resume – toggle with on‑screen buttons
-Restart – click RESTART after Game Over
+1. Left‑click & drag – slice fruits
+2. Pause/Resume – toggle with on‑screen buttons
+3. Restart – click RESTART after Game Over
 
 ---
 
-##📝 License
+## 📝 License
 
 This project is released under the MIT License. Feel free to fork, tweak, and share!
