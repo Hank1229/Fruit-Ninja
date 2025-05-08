@@ -1,4 +1,4 @@
-# Fruit Ninja Swing Game
+# Fruit Ninja Game
 
 A Java Swing remake of the classic “Fruit Ninja” arcade game. Slice flying fruits, avoid bombs, rack up combos, and survive as long as you can!
 
