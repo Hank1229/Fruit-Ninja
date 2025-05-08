@@ -46,19 +46,17 @@ A Java Swing remake of the classic “Fruit Ninja” arcade game. Slice flying f
 ## 📂 Project Structure
 
 src/com/fruitninja/
-├── Bomb.java           # defines Bomb and explosion logic
-├── BonusItem.java      # power‑up items: extra life, slow motion
-├── ComboEffect.java    # animated combo pop‑up effect
-├── Constants.java      # all game constants (sizes, paths, timings, scores)
-├── Explosion.java      # renders explosion visuals
-├── Fruit.java          # whole fruit entity, handles splitting
-├── FruitHalf.java      # half‑fruit piece trajectory
-├── FruitNinjaGame.java # main launcher & UI manager
-├── GameObject.java     # abstract base for moving objects
-└── GamePanel.java      # core game loop: spawn/update/render/collisions
-
-resource/ – background images, UI panels
-sound/ – .wav clips for slicing, bombs, power‑ups, music
+FruitNinjaGame.java – main launcher & UI manager
+GamePanel.java – game loop, spawning, rendering, input
+GameObject.java – base class for moving objects
+Fruit.java / FruitHalf.java – whole fruits & sliced halves
+Bomb.java – bomb behavior & explosion logic
+BonusItem.java – extra‑life & slow‑motion items
+ComboEffect.java – combo pop‑up animation
+Explosion.java – explosion visuals
+Constants.java – all sizes, timings, paths, scores
+resource/ – background images & UI panels
+sound/ – .wav files for slices, bombs, power‑ups, music
 
 --- 
 
