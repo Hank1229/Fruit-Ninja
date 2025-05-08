@@ -65,9 +65,3 @@ src/com/fruitninja/
 1. Left‑click & drag – slice fruits
 2. Pause/Resume – toggle with on‑screen buttons
 3. Restart – click RESTART after Game Over
-
----
-
-## 📝 License
-
-This project is released under the MIT License. Feel free to fork, tweak, and share!
